@@ -136,7 +136,8 @@ def load_pretrained_dino(model_type='dinov2_vitl14', use_registers=False, torch_
     if use_registers and 'reg' not in model_type:
         model_type = model_type + '_reg'
     
-    dinov2 = torch.hub.load('facebookresearch/dinov2', model_type).eval().cuda()
+    # dinov2 = torch.hub.load('facebookresearch/dinov2', model_type).eval().cuda()
+    dinov2 = torch.hub.load('facebookresearch/dinov2', model_type).eval()
     print(f"Loaded {model_type} model")
     
     return dinov2
@@ -157,11 +158,12 @@ def get_dino_features(dinov2, img, blur=True, repeat_to_orig_size=True):
     return features
     
 
-def transform_imgs(imgs, blur=True):
+def transform_imgs(imgs, blur=True, scale_factor=2):
     """
     Transform image before passing to DINO model
     ::param imgs:: np.array of shape (H, W, C) or (bs, H, W, C)
     ::param blur:: bool, whether to apply Gaussian blur before resizing
+    ::param scale_factor:: int, factor to scale image size by
 
     ::return:: list of transformed images
     """
@@ -173,8 +175,8 @@ def transform_imgs(imgs, blur=True):
     else:
         bs, H, W, C = imgs.shape
 
-    H *= 2
-    W *= 2
+    H *= scale_factor
+    W *= scale_factor
 
     patch_h = H // 14
     patch_w = W // 14

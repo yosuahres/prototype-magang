@@ -63,7 +63,7 @@ nbformat==5.10.4
 nest-asyncio==1.6.0
 networkx==3.2.1
 numpy==2.0.2
-open3d==0.19.0
+open3d
 openai==1.93.0
 opencv-python==4.11.0.86
 packaging==25.0
@@ -113,7 +113,7 @@ torchvision==0.22.1
 tqdm==4.67.1
 traitlets==5.14.3
 transformers==4.52.4
-triton==3.3.1
+# triton
 typing_extensions==4.14.1
 typing-inspection==0.4.1
 tzdata==2025.2

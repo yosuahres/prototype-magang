@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
 
+# -*- how to run -*-`
+# # use sentence-transformers embedding
+# python src/inference.py --config configs/st_emb.yaml --checkpoint checkpoints/st_emb.pth
+
+# use openai embedding (make sure you've properly set OPENAI_API_KEY env variable)
+# python src/inference.py --config configs/oai_emb.yaml --checkpoint checkpoints/oai_emb.pth
+
 import argparse
 import os
 import numpy as np
@@ -18,7 +25,9 @@ from utils.file_utils import load_config
 class AffordanceInference:
     def __init__(self, config_path, checkpoint_path, text_embedding_func):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        
+        print(f"Using device: {self.device}")
+
+
         # Load config
         cfg = load_config(config_path)
         model_cfg = cfg["model"]
@@ -35,20 +44,21 @@ class AffordanceInference:
         
         # Load DINO
         torch_home = cfg.get("torch_home", None)
-        self.dino = load_pretrained_dino('dinov2_vits14', use_registers=True, torch_path=torch_home).to(self.device).eval()
-
+        # self.dino = load_pretrained_dino('dinov2_vits14', use_registers=True, torch_path=torch_home).to(self.device).eval()
+        self.dino = load_pretrained_dino('dinov2_vitl14', use_registers=True, torch_path=torch_home).to(self.device).eval()
         self.text_embedding_func = text_embedding_func
     
     @torch.no_grad()
-    def predict(self, img_np, text, thresh=0.5):
+    def predict(self, img_np, text, thresh=0.5, scale_factor=2):
         """
         img_np: H×W×3 numpy array (uint8 or float in [0,1])
         text: natural language description
         thresh: threshold for binary output
+        scale_factor: int, factor to scale image size by
         Returns: similarity map as numpy array
         """
         # Preprocess image
-        proc = transform_imgs(img_np, blur=False)[0]
+        proc = transform_imgs(img_np, blur=False, scale_factor=scale_factor)[0]
         proc = proc.unsqueeze(0).to(self.device)
         
         # Get text embedding
@@ -78,7 +88,7 @@ class AffordanceInference:
             )
         )
         
-        return sim_np
+        return sim_np, feat.cpu().numpy()
 
 
 def main():
@@ -92,11 +102,18 @@ def main():
     cfg = load_config(args.config)
     
     ## ===== Example usage ===== ##
-    image_path = os.path.join(os.path.dirname(__file__), '..', 'examples', 'example_image.png')
-    text_query = "twist open"
+    image_path = os.path.join(os.path.dirname(__file__), '..', 'examples', 'sabun.jpeg')
+    text_query = "hold"
     
     # Load image
-    img = np.array(Image.open(image_path).convert("RGB"))
+    img = Image.open(image_path).convert("RGB")
+
+    # Resize image if it's too large
+    max_image_size = cfg.get("max_image_size", 1024)
+    if max(img.size) > max_image_size:
+        img.thumbnail((max_image_size, max_image_size))
+    
+    img = np.array(img)
     
     # Get text embedding function
     text_embedding_option = cfg.get("text_embedding", "embeddings_oai")
@@ -108,28 +125,48 @@ def main():
     
     # Post-processing threshold for shutting down low affordance regions
     shutdown_thresh = cfg.get("thresh", 0.5)
+    scale_factor = cfg.get("scale_factor", 2)
     
     # Run prediction
-    result = inference.predict(img, text_query, shutdown_thresh)
+    result, dino_features = inference.predict(img, text_query, shutdown_thresh, scale_factor)
     
     print(f"Predicted affordance map for '{text_query}' with shape {result.shape}")
     
+    # Visualize DINO features with PCA
+    from sklearn.decomposition import PCA
+    
+    bs, n_feats, patch_h, patch_w = dino_features.shape
+    dino_features_reshaped = dino_features.transpose(0, 2, 3, 1).reshape(bs * patch_h * patch_w, n_feats)
+    
+    pca = PCA(n_components=3)
+    pca_result = pca.fit_transform(dino_features_reshaped)
+    
+    # Normalize PCA result to be in [0, 1] for visualization
+    pca_result = (pca_result - pca_result.min()) / (pca_result.max() - pca_result.min())
+    
+    pca_img = pca_result.reshape(patch_h, patch_w, 3)
+    
     # Display result
-    plt.figure(figsize=(12, 4))
-    plt.subplot(1, 2, 1)
+    plt.figure(figsize=(18, 6))
+    plt.subplot(1, 3, 1)
     plt.imshow(img)
     plt.title("Input Image")
     plt.axis('off')
     
-    plt.subplot(1, 2, 2)
+    plt.subplot(1, 3, 2)
     plt.imshow(result, cmap='hot')
     plt.title(f"Affordance Map: '{text_query}'")
+    plt.axis('off')
+    
+    plt.subplot(1, 3, 3)
+    plt.imshow(pca_img)
+    plt.title("DINO Patch Features (PCA)")
     plt.axis('off')
     
     plt.tight_layout()
     
     # plt.show()
-    plt.savefig(os.path.join(os.path.dirname(__file__), '..', 'examples', 'affordance_map.png'))
+    plt.savefig(os.path.join(os.path.dirname(__file__), '..', 'examples', 'affordance_map_with_pca.png'))
 
 
 if __name__ == "__main__":
