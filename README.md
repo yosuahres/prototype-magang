@@ -25,6 +25,7 @@
 
 ## Contributions
 - Do some changes on the OPENAPI, now using GEMINI, as the api key is free.   
+- Optimization code,as trying to change input to live camera stream.   
 
 ## To Be Change
 - Everything with ```!TO CHANGE``` comment,  change it by yourself.   
