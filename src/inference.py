@@ -9,11 +9,11 @@
 
 import argparse
 import os
-import cv2
 import numpy as np
 from PIL import Image
 import torch
 import torchvision.transforms as T
+import matplotlib.pyplot as plt
 
 from model.network import Conv2DFiLMNet
 
@@ -95,13 +95,26 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True, help="Path to config YAML file")
     parser.add_argument("--checkpoint", required=True, help="Path to model checkpoint")
-    parser.add_argument("--text_query", type=str, default="hold", help="Text query for affordance detection")
-
+    
     args = parser.parse_args()
-
+    
     # Load config for additional settings
     cfg = load_config(args.config)
+    
+    ## ===== Example usage ===== ##
+    image_path = os.path.join(os.path.dirname(__file__), '..', 'examples', 'sabun.jpeg')
+    text_query = "hold"
+    
+    # Load image
+    img = Image.open(image_path).convert("RGB")
 
+    # Resize image if it's too large
+    max_image_size = cfg.get("max_image_size", 1024)
+    if max(img.size) > max_image_size:
+        img.thumbnail((max_image_size, max_image_size))
+    
+    img = np.array(img)
+    
     # Get text embedding function
     text_embedding_option = cfg.get("text_embedding", "embeddings_oai")
     print(f"Using text embedding option: {text_embedding_option}")
@@ -109,46 +122,51 @@ def main():
 
     # Initialize inference
     inference = AffordanceInference(args.config, args.checkpoint, text_embedding_func)
-
+    
     # Post-processing threshold for shutting down low affordance regions
     shutdown_thresh = cfg.get("thresh", 0.5)
     scale_factor = cfg.get("scale_factor", 2)
-
-    # Initialize camera
-    cap = cv2.VideoCapture(0)
-    if not cap.isOpened():
-        print("Error: Could not open camera.")
-        return
-
-    print("Press 'q' to quit.")
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            print("Error: Can't receive frame (stream end?). Exiting ...")
-            break
-
-        # Convert frame to RGB
-        img_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-        # Run prediction
-        result, _ = inference.predict(img_rgb, args.text_query, shutdown_thresh, scale_factor)
-
-        # Normalize result to 0-255 for visualization
-        heatmap = cv2.normalize(result, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-        heatmap = cv2.applyColorMap(heatmap, cv2.COLORMAP_JET)
-
-        # Combine original frame and heatmap
-        super_imposed_img = cv2.addWeighted(frame, 0.6, heatmap, 0.4, 0)
-
-        # Display the resulting frame
-        cv2.imshow('Affordance Detection', super_imposed_img)
-
-        if cv2.waitKey(1) == ord('q'):
-            break
-
-    # When everything done, release the capture
-    cap.release()
-    cv2.destroyAllWindows()
+    
+    # Run prediction
+    result, dino_features = inference.predict(img, text_query, shutdown_thresh, scale_factor)
+    
+    print(f"Predicted affordance map for '{text_query}' with shape {result.shape}")
+    
+    # Visualize DINO features with PCA
+    from sklearn.decomposition import PCA
+    
+    bs, n_feats, patch_h, patch_w = dino_features.shape
+    dino_features_reshaped = dino_features.transpose(0, 2, 3, 1).reshape(bs * patch_h * patch_w, n_feats)
+    
+    pca = PCA(n_components=3)
+    pca_result = pca.fit_transform(dino_features_reshaped)
+    
+    # Normalize PCA result to be in [0, 1] for visualization
+    pca_result = (pca_result - pca_result.min()) / (pca_result.max() - pca_result.min())
+    
+    pca_img = pca_result.reshape(patch_h, patch_w, 3)
+    
+    # Display result
+    plt.figure(figsize=(18, 6))
+    plt.subplot(1, 3, 1)
+    plt.imshow(img)
+    plt.title("Input Image")
+    plt.axis('off')
+    
+    plt.subplot(1, 3, 2)
+    plt.imshow(result, cmap='hot')
+    plt.title(f"Affordance Map: '{text_query}'")
+    plt.axis('off')
+    
+    plt.subplot(1, 3, 3)
+    plt.imshow(pca_img)
+    plt.title("DINO Patch Features (PCA)")
+    plt.axis('off')
+    
+    plt.tight_layout()
+    
+    # plt.show()
+    plt.savefig(os.path.join(os.path.dirname(__file__), '..', 'examples', 'affordance_map_with_pca.png'))
 
 
 if __name__ == "__main__":
