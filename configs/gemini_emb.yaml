@@ -1,4 +1,5 @@
 dataset_bg_dir: None
+
 model:
   in_channels: 384
   filters: [256, 64, 1]
@@ -6,13 +7,10 @@ model:
   strides: [1, 1, 1]
   norm: null
   activation: "lrelu"
-  lang_emb_dim: 384
+  lang_emb_dim: 1024
   film_mode: "zero"
 
-text_embedding: "embeddings_st"
-thresh: 0.4
-scale_factor: 2
-max_image_size: 1024
+text_embedding: "embeddings_gemini"
 
 optim:
   lr: 0.002

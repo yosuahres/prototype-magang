@@ -2,6 +2,7 @@
 Utility functions for VLM
 """
 from openai import OpenAI
+import google.generativeai as genai
 
 import os
 import ast
@@ -27,6 +28,8 @@ def get_text_embedding_options(option="embeddings_oai"):
         return get_text_embedding
     elif option == "embeddings_st":
         return get_text_embedding_sentence_transformer
+    elif option == "embeddings_gemini":
+        return get_text_embedding_gemini
     else:
         raise ValueError(f"Invalid option: {option}")
 
@@ -34,9 +37,22 @@ def get_text_embedding(text, model="text-embedding-3-large", dim=1024):
     """
     Get openai text embedding with specified dimension
     """
-    client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-    embedding = np.array(client.embeddings.create(input=[text], model=model, dimensions=dim).data[0].embedding)
-    return embedding
+    try:
+        client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        embedding = np.array(client.embeddings.create(input=[text], model=model, dimensions=dim).data[0].embedding)
+        return embedding
+    except KeyError:
+        print("OPENAI_API_KEY not found. Attempting to fall back to sentence transformer.")
+        # The hardcoded sentence transformer model produces 384-dim embeddings.
+        # Only fall back if the requested dimension is compatible.
+        if dim == 384:
+            print("Using sentence transformer for 384-dim embedding.")
+            return get_text_embedding_sentence_transformer(text)
+        else:
+            raise ValueError(
+                f"OPENAI_API_KEY not found, and the requested embedding dimension ({dim}) "
+                f"does not match the fallback sentence transformer's dimension (384)."
+            )
 
 def get_text_embedding_sentence_transformer(text, model_name="all-MiniLM-L6-v2"):
     """
@@ -44,6 +60,25 @@ def get_text_embedding_sentence_transformer(text, model_name="all-MiniLM-L6-v2")
     """
     # model = SentenceTransformer(model_name)
     embedding = sentence_transformer_model.encode(text) # shape (D,)
+    return embedding
+
+def get_text_embedding_gemini(text, model="models/text-embedding-004", dim=1024):
+    """
+    Get Gemini text embedding with specified dimension
+    """
+    genai.configure(api_key="GEMINI_API_KEY") #!TO CHANGE
+    embedding = genai.embed_content(model=model,
+                                    content=text,
+                                    task_type="retrieval_document")
+    
+    embedding = np.array(embedding['embedding'])
+    
+    # Pad the embedding if it's smaller than the target dimension
+    if embedding.shape[0] < dim:
+        padded_embedding = np.zeros(dim)
+        padded_embedding[:embedding.shape[0]] = embedding
+        return padded_embedding
+    
     return embedding
 
 ##############################################
@@ -291,4 +326,3 @@ def visualize_img_text_output(img_path_list, text_list, output_path=None):
         plt.savefig(output_path)
     else:
         plt.show()
-
