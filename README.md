@@ -1,25 +1,7 @@
-## UAD: Unsupervised Affordance Distillation for Generalization in Robotic Manipulation
+## DINOv2 + UAD algorithm for assistive robot project [BRIN 2025]
 
-#### [[Project Page]](https://unsup-affordance.github.io/) [[Paper]](https://unsup-affordance.github.io/) 
-
+# All credit to:
 [Yihe Tang](https://tangyihe.com/)<sup>1</sup>, [Wenlong Huang](https://wenlong.page)<sup>1</sup>, [Yingke Wang](https://www.wykac.com/)<sup>1</sup>, [Chengshu Li](https://www.chengshuli.me/)<sup>1</sup>, [Roy Yuan](https://www.linkedin.com/in/ryuan19)<sup>1</sup>, [Ruohan Zhang](https://ai.stanford.edu/~zharu/)<sup>1</sup>, [Jiajun Wu](https://jiajunwu.com/)<sup>1</sup>, [Li Fei-Fei](https://profiles.stanford.edu/fei-fei-li)<sup>1</sup>
-
-<sup>1</sup>Stanford University
-
-### Overview
-
-This is the official codebase for [UAD](https://unsup-affordance.github.io/). UAD is a method that distills affordance knowledge from foundation models into a task-conditioned affordance model without any manual annotations.
-
-This repo contains:
-- [UAD: Unsupervised Affordance Distillation for Generalization in Robotic Manipulation](#uad-unsupervised-affordance-distillation-for-generalization-in-robotic-manipulation)
-    - [\[Project Page\] \[Paper\]](#project-page-paper)
-  - [Overview](#overview)
-  - [Environment Setup](#environment-setup)
-  - [Affordance Model Training and Inference](#affordance-model-training-and-inference)
-  - [Object Rendering Pipeline](#object-rendering-pipeline)
-    - [B1K assets](#b1k-assets)
-    - [Objaverse assets](#objaverse-assets)
-  - [Dataset Curation Pipeline](#dataset-curation-pipeline)
 
 
 ### Environment Setup
@@ -41,95 +23,8 @@ This repo contains:
   pip install -e .
   ```
 
-### Affordance Model Training and Inference
+## Contributions
+- Do some changes on the OPENAPI, now using GEMINI, as the api key is free.   
 
-We provide options to embed language with OpenAI api, or open-sourced [sentence-transformers](https://github.com/UKPLab/sentence-transformers)
-
-- To run inference with our trained checkpoints, run:
-   ```
-   # use sentence-transformers embedding
-   python src/inference.py --config configs/st_emb.yaml --checkpoint checkpoints/st_emb.pth
-
-   # use openai embedding (make sure you've properly set OPENAI_API_KEY env variable)
-   python src/inference.py --config configs/oai_emb.yaml --checkpoint checkpoints/oai_emb.pth
-   ```
-   The script will run "twist open" query on ```examples/example_image.png``` and save output to ```examples/affordance_map.png```.
-
-- To run training on our provided or your own dataset: 
-  Our provided dataset could be found in the [Google Drive](https://drive.google.com/drive/folders/1FKrwGdCDgbIUaRtcrR0SAyNENFVnzIa-?usp=sharing)
-  1. Create the torch dataset from h5 files by running
-     ```
-     python src/model/dataset.py --data_root YOUR_DATA_DIR 
-     ```
-     This will save a .pt dataset under ```YOUR_DATA_DIR/dataset/```  
-     Arguments:
-     - only process certain categories (by default all): ```--categories CATEGORY1 CATEGORY2```
-     - choose embedding type (by default oai embedding): ```--embedding_type EMBEDDING_TYPE```
-  
-  2. Train with your saved dataset by running
-     ```
-     python src/train.py --config YOUR_CONFIG_YAML --data YOUR_DATASET_PT --run_name YOUR_RUN_NAME
-     ```
-     The logs will be saved under ```logs/yrmtdt/YOUR_RUN_NAME/ckpts```  
-     We found using some image to replace the white background of the renderings would improve model training. In our experiments, we used indoor renderings from [Behavior Vision Suite](https://behavior-vision-suite.github.io), which could be downloaded from the [Google Drive](https://drive.google.com/drive/folders/1FKrwGdCDgbIUaRtcrR0SAyNENFVnzIa-?usp=sharing). To enable background augmentation, please set the directory of your image folder to ```dataset_bg_dir``` in your config file. 
-     Arguments:
-     - multiple dataset: ```--data DATASET_1_PATH DATASET_2_PATH ```
-     - set batch size / lr / epochs: ```--lr LR --batch BATCH_SIZE --epochs NUM_EPOCHS```
-     - resume training: ```--resume_ckpt CKPT_PATH```
-     - turn off wandb logging: ```--no_wandb```
-
-
-### Object Rendering Pipeline
-We provide code to render Behavior-1K assets with Omnigibson, or Objaverse assets with Blender. 
-
-#### B1K assets
-The code is in behavior1k_omnigibson_render. 
-- Unzip ```qa_merged.zip```
-- Render assets:
-  ```
-  python render.py --orientation_root ORI_ROOT --og_dataset_root OG_DATASET_ROOT --category_model_list selected_object_models.json --save_path YOUR_DATA_DIR
-  ```
-  Note: ORI_ROOT is the folder of your unzipped ```qa_merged/```. OG_DATASET_ROOT is your Omnigibson objects path, shall be ```YOUR_OG_PATH/omnigibson/data/og_dataset/objects```.
-- Convert the renderings to .h5 format:
-  ```
-  python convert_b1k_data_with_crop.py --data_root YOUR_DATA_DIR
-  ```
-
-#### Objaverse assets
-The code is in objaverse_blender_render. 
-- Download the objaverse assets, run
-  ```
-  python objaverse_download_script.py --data_root YOUR_DATA_DIR --n N
-  ```
-  - N is the number of assets you want to download from each category. By default 50.
-  - In our case study, we have used a subset from the lvis categories. You can change the category used in the script. 
-- Filter out assets with transparent (no valid depth) or too simple texture, run
-   ```
-   python texture_filter.py --data_root YOUR_DATA_DIR
-   ```
-- Render the assets with Blender 
-   ```
-   blender --background \
-   --python blender_script.py -- \
-   --data_root YOUR_DATA_DIR \
-   --engine BLENDER_EEVEE_NEXT \
-   --num_renders 8 \
-   --only_northern_hemisphere
-   ```
-- Convert the renderings to .h5 format
-  ```
-  python h5_conversion.py --data_root=YOUR_DATA_DIR
-  ```
-
-
-### Dataset Curation Pipeline
-Pipeline to perform DINOv2 feature 3D fusion, clustering, VLM proposal and computing affordance maps. The current implementation uses gpt-4o, so requires properly setting ```OPENAI_API_KEY``` env variable. 
-
-```
-python pipeline.py --base_dir=YOUR_DATA_DIR --embedding_type=YOUR_EMBEDDING_TYPE
-```
-Arguments: 
-- ```--use_data_link_segs```: pass in when using Behavior-1K data
-- ```--top_k K```: use the best K views of render in the final dataset for training (default is 3)
-- ```--category_names CATEGORY1 CATEGORY2```: only process certain categories
-
+## To Be Change
+- Everything with ```!TO CHANGE``` comment,  change it by yourself.   
