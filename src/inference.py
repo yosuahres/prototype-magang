@@ -49,7 +49,7 @@ class AffordanceInference:
         self.text_embedding_func = text_embedding_func
     
     @torch.no_grad()
-    def predict(self, img_np, text, thresh=0.5, scale_factor=2):
+    def predict(self, img_np, text, thresh=0.1, scale_factor=2):
         """
         img_np: H×W×3 numpy array (uint8 or float in [0,1])
         text: natural language description
@@ -103,7 +103,7 @@ def main():
     
     ## ===== Example usage ===== ##
     image_path = os.path.join(os.path.dirname(__file__), '..', 'examples', 'kursi.jpeg')
-    text_query = "the region to sit on chair"
+    text_query = "highlight the area where one would sit"
     
     # Load image
     img = Image.open(image_path).convert("RGB")
@@ -160,7 +160,7 @@ def main():
     
     plt.subplot(1, 3, 3)
     plt.imshow(pca_img)
-    plt.title("DINO Patch Features (PCA)")
+    plt.title("DINOv2 Results)")
     plt.axis('off')
     
     plt.tight_layout()

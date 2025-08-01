@@ -9,6 +9,7 @@ import ast
 import base64
 import requests
 import logging
+import io
 from PIL import Image
 import matplotlib.pyplot as plt
 import numpy as np
@@ -62,23 +63,24 @@ def get_text_embedding_sentence_transformer(text, model_name="all-MiniLM-L6-v2")
     embedding = sentence_transformer_model.encode(text) # shape (D,)
     return embedding
 
-def get_text_embedding_gemini(text, model="models/text-embedding-004", dim=1024):
+def get_text_embedding_gemini(text, model="models/embedding-001", dim=1024):
     """
     Get Gemini text embedding with specified dimension
     """
-    genai.configure(api_key="AIzaSyCuxFkBH6Ls_CabrJlBR7YkvVjWzBWuTXU") #!TO CHANGE
+    genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
+
     embedding = genai.embed_content(model=model,
                                     content=text,
                                     task_type="retrieval_document")
-    
+
     embedding = np.array(embedding['embedding'])
-    
+
     # Pad the embedding if it's smaller than the target dimension
     if embedding.shape[0] < dim:
         padded_embedding = np.zeros(dim)
         padded_embedding[:embedding.shape[0]] = embedding
         return padded_embedding
-    
+
     return embedding
 
 ##############################################
@@ -100,9 +102,41 @@ def create_payload_gpt4(messages):
     }
     return payload
 
+def create_payload_gemini(system_prompt, user_prompt):
+    """
+    Create payload for Gemini.
+    Input:
+        system_prompt: list of dicts, each in form {"role": str, "content": list of content dicts}
+        user_prompt: list of dicts, each in form {"role": str, "content": list of content dicts}
+    """
+    # Extract the text parts from the system_prompt and user_prompt
+    system_text = "".join([part["text"] for part in system_prompt if part["type"] == "text"])
+    user_text = "".join([part["text"] for part in user_prompt if part["type"] == "text"])
+
+    # Extract image data from user_prompt
+    image_data = [part["image_url"]["url"].split(",")[1] for part in user_prompt if part["type"] == "image_url"]
+
+    # Create the prompt for Gemini
+    prompt = [system_text, user_text]
+    for img in image_data:
+        prompt.append(Image.open(io.BytesIO(base64.b64decode(img))))
+
+    return prompt
+
 def get_response(payload):
     client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
     return client.chat.completions.create(**payload)
+
+def get_gemini_response(prompt):
+    """
+    Get response from Gemini.
+    Input:
+        prompt: list of strings and images
+    """
+    genai.configure(api_key=os.environ["GOOGLE_API_KEY"])
+    model = genai.GenerativeModel('gemini-pro-vision')
+    response = model.generate_content(prompt)
+    return response
 
 def create_content_list(text_list, images, is_claude=False):
     """

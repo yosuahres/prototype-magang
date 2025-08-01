@@ -5,7 +5,9 @@ from PIL import Image
 from utils.vlm_utils import (
     encode_image, create_payload_gpt4, get_response, create_content_list, formulate_input,
     query_model_text_only,
-    parse_lm_output
+    parse_lm_output,
+    create_payload_gemini,
+    get_gemini_response
 )
 
 ################
@@ -100,6 +102,15 @@ def get_end_to_end_matching(obj, query_path, query_prefix, use_vlm='claude'):
         payload = create_payload_gpt4([{"role":"system", "content":system_content}, {"role":"user", "content":user_content}])
         response = get_response(payload)
         text = response.choices[0].message.content
+
+    elif use_vlm == 'gemini':
+        system_content = create_content_list(["".join(system_prompt)], None)
+        user_content = create_content_list(["".join(user_prompt)], encoded_imgs)
+
+        # query model
+        prompt = create_payload_gemini(system_content, user_content)
+        response = get_gemini_response(prompt)
+        text = response.text
 
     else:
         raise NotImplementedError(f"Invalid VLM model: {use_vlm}")
