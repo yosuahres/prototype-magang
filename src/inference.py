@@ -102,8 +102,8 @@ def main():
     cfg = load_config(args.config)
     
     ## ===== Example usage ===== ##
-    image_path = os.path.join(os.path.dirname(__file__), '..', 'examples', 'sabun.jpeg')
-    text_query = "hold"
+    image_path = os.path.join(os.path.dirname(__file__), '..', 'examples', 'kursi.jpeg')
+    text_query = "the region to sit on chair"
     
     # Load image
     img = Image.open(image_path).convert("RGB")
@@ -166,7 +166,7 @@ def main():
     plt.tight_layout()
     
     # plt.show()
-    plt.savefig(os.path.join(os.path.dirname(__file__), '..', 'examples', 'affordance_map_with_pca.png'))
+    plt.savefig(os.path.join(os.path.dirname(__file__), '..', 'hasil_st', 'affordance_map_with_pca.png'))
 
 
 if __name__ == "__main__":

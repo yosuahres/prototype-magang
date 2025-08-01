@@ -66,7 +66,7 @@ def get_text_embedding_gemini(text, model="models/text-embedding-004", dim=1024)
     """
     Get Gemini text embedding with specified dimension
     """
-    genai.configure(api_key="GEMINI_API_KEY") #!TO CHANGE
+    genai.configure(api_key="AIzaSyCuxFkBH6Ls_CabrJlBR7YkvVjWzBWuTXU") #!TO CHANGE
     embedding = genai.embed_content(model=model,
                                     content=text,
                                     task_type="retrieval_document")
