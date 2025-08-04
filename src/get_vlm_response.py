@@ -106,11 +106,10 @@ def get_end_to_end_matching(obj, query_path, query_prefix, use_vlm='claude'):
     elif use_vlm == 'gemini':
         system_content = create_content_list(["".join(system_prompt)], None)
         user_content = create_content_list(["".join(user_prompt)], encoded_imgs)
-
-        # query model
         prompt = create_payload_gemini(system_content, user_content)
         response = get_gemini_response(prompt)
         text = response.text
+        print(text)
 
     else:
         raise NotImplementedError(f"Invalid VLM model: {use_vlm}")

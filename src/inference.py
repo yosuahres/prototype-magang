@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 
 # -*- how to run -*-`
 # # use sentence-transformers embedding
@@ -65,6 +65,15 @@ class AffordanceInference:
         lang_emb = torch.from_numpy(self.text_embedding_func(text))
         lang_emb = lang_emb.to(self.device).unsqueeze(0).to(torch.float32)
         
+        # Debug: Print embedding statistics
+        print(f"Text: '{text}'")
+        print(f"Embedding shape: {lang_emb.shape}")
+        print(f"Embedding mean: {lang_emb.mean().item():.4f}")
+        print(f"Embedding std: {lang_emb.std().item():.4f}")
+        print(f"Embedding min: {lang_emb.min().item():.4f}")
+        print(f"Embedding max: {lang_emb.max().item():.4f}")
+        print("---")
+        
         # Get DINO features
         feat = get_dino_features_from_transformed_imgs(self.dino, proc, repeat_to_orig_size=False)
         feat = feat.permute(0, 3, 1, 2)
@@ -103,7 +112,8 @@ def main():
     
     ## ===== Example usage ===== ##
     image_path = os.path.join(os.path.dirname(__file__), '..', 'examples', 'kursi.jpeg')
-    text_query = "highlight the area where one would sit"
+    text_query = "sit"
+    # text_query = "where to hold to avoid hot surfaces"
     
     # Load image
     img = Image.open(image_path).convert("RGB")
@@ -115,9 +125,43 @@ def main():
     
     img = np.array(img)
     
-    # Get text embedding function
-    text_embedding_option = cfg.get("text_embedding", "embeddings_oai")
-    print(f"Using text embedding option: {text_embedding_option}")
+    # Use sentence transformer for affordance mapping (what works best)
+    print("=== COMPARING EMBEDDING METHODS ===")
+    
+    # Get both embedding functions
+    st_embedding_func = get_text_embedding_options("embeddings_st")
+    gemini_embedding_func = get_text_embedding_options("embeddings_gemini")
+    
+    # Compare embeddings for the query
+    print(f"\nQuery: '{text_query}'")
+    st_emb = st_embedding_func(text_query)
+    gemini_emb = gemini_embedding_func(text_query)
+    
+    print(f"\nSentence Transformer embedding:")
+    print(f"  Shape: {st_emb.shape}")
+    print(f"  Mean: {st_emb.mean():.6f}")
+    print(f"  Std: {st_emb.std():.6f}")
+    print(f"  Min: {st_emb.min():.6f}")
+    print(f"  Max: {st_emb.max():.6f}")
+    print(f"  Norm: {np.linalg.norm(st_emb):.6f}")
+    
+    print(f"\nGemini embedding:")
+    print(f"  Shape: {gemini_emb.shape}")
+    print(f"  Mean: {gemini_emb.mean():.6f}")
+    print(f"  Std: {gemini_emb.std():.6f}")
+    print(f"  Min: {gemini_emb.min():.6f}")
+    print(f"  Max: {gemini_emb.max():.6f}")
+    print(f"  Norm: {np.linalg.norm(gemini_emb):.6f}")
+    
+    # Calculate similarity between embeddings
+    similarity = np.dot(st_emb, gemini_emb) / (np.linalg.norm(st_emb) * np.linalg.norm(gemini_emb))
+    print(f"\nCosine similarity between ST and Gemini embeddings: {similarity:.6f}")
+    
+    print("\n" + "="*50)
+    
+    # Use the embedding method specified in config
+    text_embedding_option = cfg.get("text_embedding", "embeddings_st")
+    print(f"\nUsing embedding method from config: {text_embedding_option}")
     text_embedding_func = get_text_embedding_options(text_embedding_option)
 
     # Initialize inference
@@ -127,10 +171,56 @@ def main():
     shutdown_thresh = cfg.get("thresh", 0.5)
     scale_factor = cfg.get("scale_factor", 2)
     
-    # Run prediction
+    # Run prediction with specified method
     result, dino_features = inference.predict(img, text_query, shutdown_thresh, scale_factor)
+    print(f"\nPredicted affordance map with {text_embedding_option} for '{text_query}' with shape {result.shape}")
     
-    print(f"Predicted affordance map for '{text_query}' with shape {result.shape}")
+    # COMPARISON: Also run with Sentence Transformer if using Gemini
+    if text_embedding_option == "embeddings_gemini":
+        print("\n=== COMPARISON WITH SENTENCE TRANSFORMER ===")
+        inference_st = AffordanceInference(args.config, args.checkpoint, st_embedding_func)
+        result_st, _ = inference_st.predict(img, text_query, shutdown_thresh, scale_factor)
+        
+        # Compare results
+        print(f"Gemini result - Non-zero pixels: {np.count_nonzero(result)}, Max: {result.max():.4f}, Mean: {result.mean():.4f}")
+        print(f"SentenceT result - Non-zero pixels: {np.count_nonzero(result_st)}, Max: {result_st.max():.4f}, Mean: {result_st.mean():.4f}")
+        
+        # Detailed analysis of why Gemini fails
+        print("\n=== DETAILED ANALYSIS ===")
+        if np.count_nonzero(result) == 0:
+            print("❌ PROBLEM: Gemini produces NO activated pixels!")
+            print("   This means the model thinks there's no affordance anywhere.")
+        elif np.count_nonzero(result) < np.count_nonzero(result_st) * 0.1:
+            print("❌ PROBLEM: Gemini produces very few activated pixels compared to SentenceT")
+        
+        if result.max() < 0.1:
+            print("❌ PROBLEM: Gemini's maximum activation is very low")
+            print("   The model has very low confidence in any region")
+            
+        if similarity < 0.1:
+            print("❌ ROOT CAUSE: Embedding spaces are completely different!")
+            print("   Cosine similarity < 0.1 means embeddings are nearly orthogonal")
+            print("   The model was trained on SentenceTransformer embeddings and doesn't understand Gemini embeddings")
+        elif similarity < 0.3:
+            print("⚠️  WARNING: Embedding spaces are quite different")
+            print("   Cosine similarity < 0.3 suggests significant semantic differences")
+        
+        print(f"\n💡 SOLUTIONS TO TRY:")
+        print(f"1. Train a new model with Gemini embeddings")
+        print(f"2. Use embedding alignment/transformation techniques")
+        print(f"3. Stick with SentenceTransformer for affordance (it works!)")
+        print(f"4. Use Gemini only for VLM tasks, not affordance prediction")
+        
+        # Store both results for visualization
+        result_comparison = result_st
+    else:
+        result_comparison = None
+
+    # Get Gemini response
+    from get_vlm_response import get_end_to_end_matching
+    image_name = os.path.splitext(os.path.basename(image_path))[0]  # Extract filename without extension
+    result_vlm = get_end_to_end_matching("chair", os.path.join(os.path.dirname(__file__), '..', 'examples'), [image_name], use_vlm='gemini')
+    print("VLM Analysis Result:", result_vlm)
     
     # Visualize DINO features with PCA
     from sklearn.decomposition import PCA
@@ -147,26 +237,52 @@ def main():
     pca_img = pca_result.reshape(patch_h, patch_w, 3)
     
     # Display result
-    plt.figure(figsize=(18, 6))
-    plt.subplot(1, 3, 1)
-    plt.imshow(img)
-    plt.title("Input Image")
-    plt.axis('off')
-    
-    plt.subplot(1, 3, 2)
-    plt.imshow(result, cmap='hot')
-    plt.title(f"Affordance Map: '{text_query}'")
-    plt.axis('off')
-    
-    plt.subplot(1, 3, 3)
-    plt.imshow(pca_img)
-    plt.title("DINOv2 Results)")
-    plt.axis('off')
+    if result_comparison is not None:
+        # Show comparison: Gemini vs Sentence Transformer
+        plt.figure(figsize=(24, 6))
+        
+        plt.subplot(1, 4, 1)
+        plt.imshow(img)
+        plt.title("Input Image")
+        plt.axis('off')
+        
+        plt.subplot(1, 4, 2)
+        plt.imshow(result, cmap='hot')
+        plt.title(f"Gemini Affordance Map: '{text_query}'")
+        plt.axis('off')
+        
+        plt.subplot(1, 4, 3)
+        plt.imshow(result_comparison, cmap='hot')
+        plt.title(f"SentenceT Affordance Map: '{text_query}'")
+        plt.axis('off')
+        
+        plt.subplot(1, 4, 4)
+        plt.imshow(pca_img)
+        plt.title("DINOv2 Features (PCA)")
+        plt.axis('off')
+        
+    else:
+        # Original single result view
+        plt.figure(figsize=(18, 6))
+        plt.subplot(1, 3, 1)
+        plt.imshow(img)
+        plt.title("Input Image")
+        plt.axis('off')
+        
+        plt.subplot(1, 3, 2)
+        plt.imshow(result, cmap='hot')
+        plt.title(f"Affordance Map: '{text_query}'")
+        plt.axis('off')
+        
+        plt.subplot(1, 3, 3)
+        plt.imshow(pca_img)
+        plt.title("DINOv2 Features (PCA)")
+        plt.axis('off')
     
     plt.tight_layout()
     
     # plt.show()
-    plt.savefig(os.path.join(os.path.dirname(__file__), '..', 'hasil_st', 'affordance_map_with_pca.png'))
+    plt.savefig(os.path.join(os.path.dirname(__file__), '..', 'hasil_st', 'asu.png'))
 
 
 if __name__ == "__main__":

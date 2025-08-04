@@ -7,7 +7,7 @@ model:
   strides: [1, 1, 1]
   norm: null
   activation: "lrelu"
-  lang_emb_dim: 1024
+  lang_emb_dim: 384
   film_mode: "zero"
 
 text_embedding: "embeddings_gemini"
