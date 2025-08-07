@@ -91,6 +91,7 @@ class RegionSimDataset(Dataset):
         Which embedding group to use from the H5 file. Options:
         - "embeddings_oai": openai embeddings api
         - "embeddings_st": sentence transformer embeddings
+        - "embeddings_gemini": gemini embeddings api
     """
     # ................................................................. #
     def __init__(self,
@@ -410,7 +411,7 @@ def create_dataset(data_root, use_categories=None, random_pad=False, bg_dir=None
     bg_dir : str or list[str], optional
         Directory(ies) containing background images
     embedding_type : str
-        Which embedding to use ("embeddings" or "st_embeddings")
+        Which embedding to use ("embeddings_oai", "embeddings_st", or "embeddings_gemini")
     """
     if not os.path.exists(os.path.join(data_root, 'h5')):
         raise FileNotFoundError(f"h5 folder not found in {data_root}, please pass in the path to the h5 folder")
@@ -443,7 +444,7 @@ if __name__ == "__main__":
     parser.add_argument("--categories", nargs='+', default=None,
                         help="Categories to use (default: all)")
     parser.add_argument("--embedding_type", type=str, default="embeddings_oai",
-                        choices=["embeddings_oai", "embeddings_st"],
+                        choices=["embeddings_oai", "embeddings_st", "embeddings_gemini"],
                         help="Which embedding type to use")
     parser.add_argument("--n_show", type=int, default=1,
                         help="Number of samples to visualize")
